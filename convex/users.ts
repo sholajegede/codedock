@@ -1,11 +1,38 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 
+export const upgradeToPro = mutation({
+  args: {
+    email: v.string(),
+    lemonSqueezyCustomerId: v.string(),
+    lemonSqueezyOrderId: v.string(),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("email"), args.email))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    await ctx.db.patch(user._id, {
+      isPro: true,
+      proSince: Date.now(),
+      lemonSqueezyCustomerId: args.lemonSqueezyCustomerId,
+      lemonSqueezyOrderId: args.lemonSqueezyOrderId,
+    });
+
+    return { success: true };
+  },
+});
+
 export const createUser = internalMutation({
   args: {
     clerkId: v.string(),
     email: v.string(),
-    username: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     notificationType: v.optional(v.string()),
@@ -20,7 +47,8 @@ export const createUser = internalMutation({
       const newUserId = await ctx.db.insert("users", {
         clerkId: args.clerkId,
         email: args.email,
-        username: args.username || "",
+        firstName: args.firstName,
+        lastName: args.lastName,
         imageUrl: args.imageUrl,
         imageStorageId: args.imageStorageId,
         notificationType: "all",
@@ -28,7 +56,7 @@ export const createUser = internalMutation({
         marketing_updates: false,
         social_updates: false,
         security_updates: true,
-        stripeId: args.stripeId || ""
+        isPro: false
       });
       const updatedUser = await ctx.db.get(newUserId);
 
@@ -44,7 +72,8 @@ export const updateUser = mutation({
   args: {
     userId: v.id("users"),
     email: v.optional(v.string()),
-    username: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     notificationType: v.optional(v.string()),
@@ -73,7 +102,8 @@ export const updateUser = mutation({
       ...(args.social_updates !== undefined && { social_updates: args.social_updates }),
       ...(args.security_updates !== undefined && { security_updates: args.security_updates }),
       ...(args.email !== undefined && { email: args.email }),
-      ...(args.username !== undefined && { username: args.username }),
+      ...(args.firstName !== undefined && { firstName: args.firstName }),
+      ...(args.lastName !== undefined && { lastName: args.lastName }),
       ...(args.stripeId !== undefined && { stripeId: args.stripeId })
     };
 
@@ -196,7 +226,8 @@ export const updateUserClerk = internalMutation({
     clerkId: v.string(),
     imageUrl: v.optional(v.string()),
     email: v.optional(v.string()),
-    username: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     stripeId: v.optional(v.string())
   },
   handler: async (ctx, args) => {
@@ -213,7 +244,8 @@ export const updateUserClerk = internalMutation({
       ...(args.clerkId !== undefined && { clerkId: args.clerkId }),
       ...(args.imageUrl !== undefined && { imageUrl: args.imageUrl }),
       ...(args.email !== undefined && { email: args.email }),
-      ...(args.username !== undefined && { username: args.username }),
+      ...(args.firstName !== undefined && { firstName: args.firstName }),
+      ...(args.lastName !== undefined && { lastName: args.lastName }),
       ...(args.stripeId !== undefined && { stripeId: args.stripeId })
     };
 

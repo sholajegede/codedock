@@ -1,12 +1,9 @@
-// ===== reference links =====
-// https://www.convex.dev/templates (open the link and choose for clerk than you will get the github link mentioned below)
-// https://github.dev/webdevcody/thumbnail-critique/blob/6637671d72513cfe13d00cb7a2990b23801eb327/convex/schema.ts
-
 import type { WebhookEvent } from "@clerk/nextjs/server";
 import { httpRouter } from "convex/server";
 import { Webhook as ClerkWebhook } from "svix";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { api } from "./_generated/api";
 
 const http = httpRouter();
 
@@ -21,7 +18,8 @@ const handleClerkWebhook = httpAction(async (ctx, request) => {
       await ctx.runMutation(internal.users.createUser, {
         clerkId: event.data.id,
         email: event.data.email_addresses[0].email_address,
-        username: event.data.first_name || "",
+        firstName: event.data.first_name || "",
+        lastName: event.data.last_name || "",
         imageUrl: event.data.image_url,
       });
       break;
@@ -30,7 +28,8 @@ const handleClerkWebhook = httpAction(async (ctx, request) => {
         clerkId: event.data.id,
         imageUrl: event.data.image_url,
         email: event.data.email_addresses[0].email_address,
-        username: event.data.first_name || "",
+        firstName: event.data.first_name || "",
+        lastName: event.data.last_name || "",
       });
       break;
     case "user.deleted":
@@ -67,5 +66,45 @@ const validateClerkRequest = async (
   const event = wh.verify(payloadString, svixHeaders);
   return event as unknown as WebhookEvent;
 };
+
+http.route({
+  path: "/lemon-squeezy",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const payloadString = await request.text();
+    const signature = request.headers.get("X-Signature");
+
+    if (!signature) {
+      return new Response("Missing X-Signature header", { status: 400 });
+    }
+
+    try {
+      const payload = await ctx.runAction(internal.lemonSqueezy.verifyWebhook, {
+        payload: payloadString,
+        signature,
+      });
+
+      if (payload.meta.event_name === "order_created") {
+        const { data } = payload;
+
+        const { success } = await ctx.runMutation(api.users.upgradeToPro, {
+          email: data.attributes.user_email,
+          lemonSqueezyCustomerId: data.attributes.customer_id.toString(),
+          lemonSqueezyOrderId: data.id,
+          amount: data.attributes.total,
+        });
+
+        if (success) {
+          // optionally do anything here
+        }
+      }
+
+      return new Response("Webhook processed successfully", { status: 200 });
+    } catch (error) {
+      console.log("Webhook error:", error);
+      return new Response("Error processing webhook", { status: 500 });
+    }
+  }),
+});
 
 export default http;
